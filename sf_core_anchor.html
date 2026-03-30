@@ -1,0 +1,1043 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;700&family=IBM+Plex+Sans:wght@300;400;600&display=swap');
+
+  :root {
+    --void: #060606;
+    --void2: #0C0C0C;
+    --void3: #111111;
+    --dim: #1A1A1A;
+    --dim2: #242424;
+    --gold: #C8A951;
+    --gold-dim: #8A7235;
+    --neon: #E6FF00;
+    --red: #FF3B30;
+    --red-dim: rgba(255,59,48,0.15);
+    --orange: #FF8C00;
+    --green: #34C759;
+    --text: #C8C8C8;
+    --text-dim: #555;
+    --text-ghost: #2A2A2A;
+    --mono: 'IBM Plex Mono', monospace;
+    --sans: 'IBM Plex Sans', sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--void);
+    font-family: var(--mono);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Scanlines */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg, transparent, transparent 2px,
+      rgba(0,0,0,0.03) 2px, rgba(0,0,0,0.03) 3px
+    );
+    pointer-events: none;
+    z-index: 9999;
+  }
+
+  .app {
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 24px 20px;
+  }
+
+  /* ── HEADER ── */
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    border-bottom: 1px solid var(--dim);
+    padding-bottom: 18px;
+    margin-bottom: 24px;
+  }
+  .header-left .tag {
+    font-size: 9px;
+    color: var(--gold);
+    letter-spacing: 0.22em;
+    margin-bottom: 6px;
+  }
+  .header-left .title {
+    font-size: 20px;
+    font-weight: 700;
+    color: #fff;
+    letter-spacing: 0.06em;
+  }
+  .header-left .sub {
+    font-size: 9px;
+    color: var(--text-dim);
+    margin-top: 3px;
+  }
+  .header-right {
+    text-align: right;
+  }
+  .status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 9px;
+    letter-spacing: 0.14em;
+    padding: 4px 10px;
+    border: 1px solid var(--dim2);
+    color: var(--text-dim);
+    transition: all 0.4s;
+  }
+  .status-badge.active { border-color: var(--gold-dim); color: var(--gold); }
+  .status-badge.alert  { border-color: rgba(255,59,48,0.4); color: var(--red); animation: blink 1s infinite; }
+  .status-dot {
+    width: 5px; height: 5px;
+    border-radius: 50%;
+    background: var(--text-dim);
+    transition: background 0.4s;
+  }
+  .status-badge.active .status-dot { background: var(--gold); }
+  .status-badge.alert  .status-dot { background: var(--red); }
+
+  /* ── GRID MAIN ── */
+  .grid-main {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+  .grid-full { grid-column: 1 / -1; }
+
+  /* ── PANEL ── */
+  .panel {
+    background: var(--void2);
+    border: 1px solid var(--dim);
+    padding: 16px;
+    transition: border-color 0.4s, box-shadow 0.4s;
+    position: relative;
+    overflow: hidden;
+  }
+  .panel.alert-state {
+    border-color: rgba(255,59,48,0.35);
+    box-shadow: 0 0 20px rgba(255,59,48,0.06);
+    animation: pulsePanel 1.4s ease-in-out infinite;
+  }
+  .panel-label {
+    font-size: 9px;
+    color: var(--gold);
+    letter-spacing: 0.2em;
+    margin-bottom: 12px;
+  }
+
+  /* ── NTI DISPLAY ── */
+  .nti-value {
+    font-size: 48px;
+    font-weight: 700;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.01em;
+    transition: color 0.5s;
+  }
+  .nti-state {
+    font-size: 9px;
+    letter-spacing: 0.16em;
+    margin-top: 6px;
+    margin-bottom: 14px;
+    transition: color 0.5s;
+  }
+  .nti-bar-track {
+    height: 3px;
+    background: var(--dim);
+    position: relative;
+    margin-bottom: 8px;
+  }
+  .nti-bar-fill {
+    position: absolute;
+    top: 0; left: 0; bottom: 0;
+    transition: width 0.8s cubic-bezier(0.4,0,0.2,1), background 0.5s;
+  }
+  .nti-threshold {
+    position: absolute;
+    top: -4px;
+    width: 1px;
+    height: 11px;
+    background: rgba(230,255,0,0.3);
+  }
+  .nti-labels {
+    display: flex;
+    justify-content: space-between;
+    font-size: 8px;
+    color: var(--text-ghost);
+    letter-spacing: 0.08em;
+  }
+
+  /* ── SENSOR INPUTS ── */
+  .sensor-row {
+    display: grid;
+    gap: 10px;
+  }
+  .sensor-item label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 9px;
+    color: var(--text-dim);
+    letter-spacing: 0.12em;
+    margin-bottom: 6px;
+  }
+  .sensor-item label span { color: var(--gold); }
+  input[type=range] {
+    -webkit-appearance: none;
+    width: 100%;
+    height: 3px;
+    background: var(--dim);
+    outline: none;
+    cursor: pointer;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 10px; height: 10px;
+    background: var(--gold);
+    border-radius: 0;
+    cursor: pointer;
+  }
+  .sensor-norm {
+    font-size: 9px;
+    color: var(--text-ghost);
+    margin-top: 4px;
+    text-align: right;
+  }
+
+  /* ── RULE ENGINE ── */
+  .rule-list { display: grid; gap: 6px; }
+  .rule-item {
+    display: flex;
+    align-items: stretch;
+    border: 1px solid var(--dim);
+    font-size: 9px;
+    letter-spacing: 0.08em;
+    transition: border-color 0.3s, background 0.3s;
+    overflow: hidden;
+    cursor: pointer;
+  }
+  .rule-item:hover { border-color: var(--dim2); }
+  .rule-item.firing {
+    border-color: var(--gold-dim);
+    background: rgba(200,169,81,0.04);
+    animation: ruleFlash 0.6s ease-out;
+  }
+  .rule-item.blocked {
+    border-color: rgba(255,59,48,0.3);
+    background: var(--red-dim);
+  }
+  .rule-cond {
+    padding: 8px 10px;
+    color: var(--text-dim);
+    background: var(--dim);
+    min-width: 100px;
+    display: flex;
+    align-items: center;
+    font-size: 8px;
+    letter-spacing: 0.1em;
+  }
+  .rule-arrow {
+    padding: 8px 6px;
+    color: var(--text-ghost);
+    display: flex;
+    align-items: center;
+  }
+  .rule-action {
+    padding: 8px 10px;
+    color: var(--text);
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .rule-indicator {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--text-ghost);
+    transition: background 0.3s;
+    flex-shrink: 0;
+    margin-left: 8px;
+  }
+  .rule-item.firing .rule-indicator { background: var(--gold); }
+  .rule-item.blocked .rule-indicator { background: var(--red); }
+
+  /* ── ACTION CONSOLE ── */
+  .console-output {
+    height: 160px;
+    overflow-y: auto;
+    font-size: 10px;
+    line-height: 1.7;
+    color: var(--text-dim);
+    margin-bottom: 10px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--dim2) transparent;
+  }
+  .console-output::-webkit-scrollbar { width: 3px; }
+  .console-output::-webkit-scrollbar-thumb { background: var(--dim2); }
+  .log-line { display: flex; gap: 10px; align-items: baseline; }
+  .log-time { color: var(--text-ghost); flex-shrink: 0; font-size: 9px; }
+  .log-level-ok   { color: var(--green); }
+  .log-level-warn { color: var(--orange); }
+  .log-level-err  { color: var(--red); }
+  .log-level-sys  { color: var(--gold); }
+  .log-level-info { color: var(--text-dim); }
+  .log-msg { color: var(--text); }
+
+  .console-input-row {
+    display: flex;
+    align-items: center;
+    border: 1px solid var(--dim);
+    background: var(--void);
+    transition: border-color 0.3s;
+  }
+  .console-input-row:focus-within { border-color: var(--gold-dim); }
+  .console-prompt {
+    padding: 0 10px;
+    font-size: 10px;
+    color: var(--gold);
+    flex-shrink: 0;
+  }
+  .console-input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 10px;
+    padding: 8px 0;
+    letter-spacing: 0.05em;
+  }
+  .console-input::placeholder { color: var(--text-ghost); }
+  .console-run {
+    background: none;
+    border: none;
+    border-left: 1px solid var(--dim);
+    color: var(--text-dim);
+    font-family: var(--mono);
+    font-size: 9px;
+    padding: 8px 12px;
+    cursor: pointer;
+    letter-spacing: 0.1em;
+    transition: color 0.2s, background 0.2s;
+  }
+  .console-run:hover { color: var(--gold); background: rgba(200,169,81,0.05); }
+
+  /* ── EXECUTION LOG ── */
+  .exec-log { display: grid; gap: 6px; }
+  .exec-entry {
+    display: grid;
+    grid-template-columns: 52px 1fr auto;
+    gap: 8px;
+    align-items: center;
+    padding: 8px 10px;
+    border: 1px solid var(--dim);
+    font-size: 9px;
+    letter-spacing: 0.06em;
+    animation: entrySlide 0.3s ease-out;
+  }
+  .exec-time { color: var(--text-ghost); }
+  .exec-desc { color: var(--text); }
+  .exec-result {
+    font-size: 8px;
+    padding: 2px 6px;
+    border: 1px solid;
+    letter-spacing: 0.1em;
+  }
+  .exec-result.ok   { color: var(--green);  border-color: rgba(52,199,89,0.3);  background: rgba(52,199,89,0.05); }
+  .exec-result.warn { color: var(--orange); border-color: rgba(255,140,0,0.3);  background: rgba(255,140,0,0.05); }
+  .exec-result.fail { color: var(--red);    border-color: rgba(255,59,48,0.3);  background: var(--red-dim); }
+
+  /* ── TOOL QUICK-FIRE ── */
+  .tool-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 6px;
+  }
+  .tool-btn {
+    background: var(--void);
+    border: 1px solid var(--dim);
+    color: var(--text-dim);
+    font-family: var(--mono);
+    font-size: 9px;
+    padding: 8px 4px;
+    cursor: pointer;
+    text-align: center;
+    letter-spacing: 0.06em;
+    transition: all 0.25s;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+  }
+  .tool-btn:hover { border-color: var(--dim2); color: var(--text); }
+  .tool-btn.active {
+    border-color: var(--gold-dim);
+    color: var(--gold);
+    background: rgba(200,169,81,0.04);
+  }
+  .tool-btn .hz { font-size: 8px; color: var(--text-ghost); }
+  .tool-btn.active .hz { color: var(--gold-dim); }
+
+  /* ── MIHM TRACK ── */
+  .mihm-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 9px;
+    color: var(--text-dim);
+    letter-spacing: 0.1em;
+    margin-bottom: 5px;
+  }
+  .mihm-track {
+    height: 4px;
+    background: var(--dim);
+    position: relative;
+    margin-bottom: 12px;
+  }
+  .mihm-fill {
+    position: absolute;
+    top: 0; left: 0; bottom: 0;
+    background: var(--gold);
+    transition: width 1s ease;
+  }
+  .sensor-fill {
+    position: absolute;
+    top: 0; left: 0; bottom: 0;
+    transition: width 0.8s ease;
+    opacity: 0.6;
+  }
+
+  /* ── FOOTER ── */
+  .footer {
+    margin-top: 20px;
+    padding-top: 12px;
+    border-top: 1px solid var(--dim);
+    display: flex;
+    justify-content: space-between;
+    font-size: 8px;
+    color: var(--text-ghost);
+    letter-spacing: 0.1em;
+  }
+
+  /* ── KEYFRAMES ── */
+  @keyframes blink {
+    0%,49% { opacity: 1; } 50%,100% { opacity: 0.3; }
+  }
+  @keyframes pulsePanel {
+    0%,100% { box-shadow: 0 0 0 rgba(255,59,48,0); }
+    50%      { box-shadow: 0 0 18px rgba(255,59,48,0.12); }
+  }
+  @keyframes ruleFlash {
+    0%   { background: rgba(200,169,81,0.15); }
+    100% { background: rgba(200,169,81,0.04); }
+  }
+  @keyframes entrySlide {
+    from { opacity: 0; transform: translateY(-4px); }
+    to   { opacity: 1; transform: none; }
+  }
+  @keyframes fireAction {
+    0%   { opacity: 1; }
+    50%  { opacity: 0.4; }
+    100% { opacity: 1; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- HEADER -->
+  <div class="header">
+    <div class="header-left">
+      <div class="tag">SF-CORE · MODULE 0.2</div>
+      <div class="title">ANCHOR</div>
+      <div class="sub">Motor de Reglas · Ejecutor de Acciones · Registro de Consecuencias</div>
+    </div>
+    <div class="header-right">
+      <div class="status-badge" id="status-badge">
+        <div class="status-dot"></div>
+        <span id="status-text">INICIALIZANDO</span>
+      </div>
+      <div style="font-size:9px;color:var(--text-ghost);margin-top:8px;text-align:right;" id="clock-display"></div>
+    </div>
+  </div>
+
+  <!-- ROW 1: NTI + SENSOR -->
+  <div class="grid-main">
+
+    <!-- NTI panel -->
+    <div class="panel" id="nti-panel">
+      <div class="panel-label">NTI · ÍNDICE DE TENSIÓN NODAL</div>
+      <div class="nti-value" id="nti-value">0.000</div>
+      <div class="nti-state" id="nti-state">COHERENTE</div>
+      <div class="nti-bar-track">
+        <div class="nti-bar-fill" id="nti-bar-fill"></div>
+        <div class="nti-threshold" style="left:20%"></div>
+        <div class="nti-threshold" style="left:40%"></div>
+        <div class="nti-threshold" style="left:60%"></div>
+        <div class="nti-threshold" style="left:80%"></div>
+      </div>
+      <div class="nti-labels">
+        <span>0.0</span><span style="color:rgba(230,255,0,0.4)">0.6 BIFURC.</span><span>1.0</span>
+      </div>
+    </div>
+
+    <!-- SENSOR INPUT panel -->
+    <div class="panel">
+      <div class="panel-label">SENSOR_IN · MÉTRICAS REALES</div>
+      <div class="sensor-row">
+        <div class="sensor-item">
+          <label>COMMITS HOY <span id="commits-val">0</span> / 8</label>
+          <input type="range" id="commits-slider" min="0" max="8" value="0"
+            oninput="updateSensor()">
+          <div class="sensor-norm" id="commits-norm">norm: 0.000</div>
+        </div>
+        <div class="sensor-item" style="margin-top:6px">
+          <label>MINUTOS FOCO <span id="focus-val">0</span> / 240</label>
+          <input type="range" id="focus-slider" min="0" max="240" value="0"
+            oninput="updateSensor()">
+          <div class="sensor-norm" id="focus-norm">norm: 0.000</div>
+        </div>
+      </div>
+      <!-- dual track -->
+      <div style="margin-top:14px">
+        <div class="mihm-row">
+          <span>MIHM</span><span id="mihm-num" style="color:var(--gold)">0.000</span>
+        </div>
+        <div class="mihm-track">
+          <div class="mihm-fill" id="mihm-fill"></div>
+        </div>
+        <div class="mihm-row">
+          <span>REAL</span><span id="real-num">0.000</span>
+        </div>
+        <div class="mihm-track">
+          <div class="sensor-fill" id="sensor-fill" style="background:var(--gold)"></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- TOOL QUICK-FIRE -->
+  <div class="panel" style="margin-bottom:12px">
+    <div class="panel-label">HERRAMIENTA ACTIVA · DISPARO DIRECTO</div>
+    <div class="tool-grid" id="tool-grid"></div>
+  </div>
+
+  <!-- ROW 2: RULES + CONSOLE -->
+  <div class="grid-main">
+
+    <!-- RULE ENGINE -->
+    <div class="panel">
+      <div class="panel-label">MOTOR DE REGLAS · SF-RULES v0.2</div>
+      <div class="rule-list" id="rule-list"></div>
+    </div>
+
+    <!-- ACTION CONSOLE -->
+    <div class="panel">
+      <div class="panel-label">CONSOLA DE ACCIONES</div>
+      <div class="console-output" id="console-output"></div>
+      <div class="console-input-row">
+        <span class="console-prompt">accion &gt;</span>
+        <input class="console-input" id="cmd-input"
+          placeholder="commit · log · ejecutar · estado · ayuda"
+          autocomplete="off" spellcheck="false"
+          onkeydown="if(event.key==='Enter') runCmd()">
+        <button class="console-run" onclick="runCmd()">RUN</button>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- EXECUTION LOG -->
+  <div class="panel grid-full" style="margin-bottom:0">
+    <div class="panel-label" style="display:flex;justify-content:space-between;align-items:center">
+      <span>LOG DE EJECUCIÓN · CONSECUENCIAS REGISTRADAS</span>
+      <span style="font-size:8px;color:var(--text-ghost);cursor:pointer" onclick="clearExecLog()">LIMPIAR</span>
+    </div>
+    <div class="exec-log" id="exec-log">
+      <div style="font-size:9px;color:var(--text-ghost);letter-spacing:0.1em;padding:8px 0">
+        — sin acciones ejecutadas —
+      </div>
+    </div>
+  </div>
+
+  <!-- FOOTER -->
+  <div class="footer">
+    <span>SF-CORE.ANCHOR · v0.2</span>
+    <span id="footer-nti">NTI: 0.000</span>
+    <span>TargetAttractor: 1.000</span>
+  </div>
+
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════
+// ESTADO CENTRAL
+// ═══════════════════════════════════════════════════════
+const State = {
+  commits: 0, focusMin: 0,
+  activeTool: null,
+  nti: 0, mihm: 0, sensorIn: 0,
+  execLog: [],
+  cmdHistory: [], historyIdx: -1,
+  prevNTI: null,
+  rulesActive: new Set(),
+};
+
+// ═══════════════════════════════════════════════════════
+// DEFINICIÓN DE REGLAS
+// ═══════════════════════════════════════════════════════
+const RULES = [
+  {
+    id: 'r1',
+    cond: 'NTI > 0.6',
+    test: (s) => s.nti > 0.6,
+    action: 'LOG · Bifurcación detectada',
+    type: 'log',
+    exec: (s) => execAction('LOG', `Bifurcación. NTI=${s.nti.toFixed(3)} MIHM=${s.mihm.toFixed(3)} REAL=${s.sensorIn.toFixed(3)}`, 'warn'),
+  },
+  {
+    id: 'r2',
+    cond: 'NTI > 0.8',
+    test: (s) => s.nti > 0.8,
+    action: 'COMMIT · Forzar snapshot',
+    type: 'commit',
+    exec: (s) => execAction('COMMIT', `snapshot_colapso_${timestamp()}.md — NTI=${s.nti.toFixed(3)}`, 'fail'),
+  },
+  {
+    id: 'r3',
+    cond: 'TOOL = gavel',
+    test: (s) => s.activeTool === 'gavel',
+    action: 'EJECUTAR · Colapsar superposición',
+    type: 'ejecutar',
+    exec: (s) => execAction('EJECUTAR', `colapso_decision_${timestamp()} → resolución forzada`, 'ok'),
+  },
+  {
+    id: 'r4',
+    cond: 'TOOL = chisel',
+    test: (s) => s.activeTool === 'chisel',
+    action: 'LOG · Reescritura de narrativa',
+    type: 'log',
+    exec: (s) => execAction('LOG', `narrativa_intervenida_${timestamp()} — vector activo`, 'ok'),
+  },
+  {
+    id: 'r5',
+    cond: 'REAL < MIHM − 0.3',
+    test: (s) => s.sensorIn < s.mihm - 0.3,
+    action: 'LOG · Desfase crítico de trayectoria',
+    type: 'log',
+    exec: (s) => execAction('LOG', `desfase δ=${(s.mihm - s.sensorIn).toFixed(3)} — recalibración pendiente`, 'warn'),
+  },
+  {
+    id: 'r6',
+    cond: 'REAL ≥ MIHM',
+    test: (s) => s.sensorIn >= s.mihm && s.mihm > 0,
+    action: 'COMMIT · Registro de coherencia',
+    type: 'commit',
+    exec: (s) => execAction('COMMIT', `coherencia_verificada_${timestamp()} — trayectoria mantenida`, 'ok'),
+  },
+];
+
+// ═══════════════════════════════════════════════════════
+// HERRAMIENTAS
+// ═══════════════════════════════════════════════════════
+const TOOLS = [
+  { id:'compass',       label:'COMPÁS',    hz:432 },
+  { id:'square',        label:'ESCUADRA',  hz:528 },
+  { id:'gavel',         label:'MAZO',      hz:333 },
+  { id:'chisel',        label:'CINCEL',    hz:852 },
+  { id:'level',         label:'NIVEL',     hz:963 },
+  { id:'mallet',        label:'MALLET',    hz:741 },
+  { id:'ruler',         label:'REGLA',     hz:111 },
+  { id:'trowel',        label:'LLANA',     hz:222 },
+  { id:'plumb',         label:'PLOMADA',   hz:639 },
+  { id:'compass-square',label:'MAESTRA',   hz:444 },
+];
+
+// ═══════════════════════════════════════════════════════
+// NTI STATE MAPPING
+// ═══════════════════════════════════════════════════════
+function getNTIState(nti) {
+  if (nti < 0.2) return { label:'COHERENTE',            color:'#C8A951', css:'active' };
+  if (nti < 0.4) return { label:'TENSIÓN BAJA',          color:'#8BC34A', css:'active' };
+  if (nti < 0.6) return { label:'TENSIÓN CRÍTICA',       color:'#E6FF00', css:'active' };
+  if (nti < 0.8) return { label:'BIFURCACIÓN',           color:'#FF8C00', css:'alert'  };
+  return               { label:'COLAPSO DE TRAYECTORIA', color:'#FF3B30', css:'alert'  };
+}
+
+// ═══════════════════════════════════════════════════════
+// MIHM PROJECTION
+// ═══════════════════════════════════════════════════════
+function getMIHM() {
+  const now = new Date();
+  const h = now.getHours() + now.getMinutes()/60 + now.getSeconds()/3600;
+  if (h <= 6)  return 0;
+  if (h >= 22) return 1;
+  return (h - 6) / 16;
+}
+
+// ═══════════════════════════════════════════════════════
+// TIMESTAMP
+// ═══════════════════════════════════════════════════════
+function timestamp() {
+  const n = new Date();
+  return `${String(n.getHours()).padStart(2,'0')}${String(n.getMinutes()).padStart(2,'0')}${String(n.getSeconds()).padStart(2,'0')}`;
+}
+function timeDisplay() {
+  const n = new Date();
+  return `${String(n.getHours()).padStart(2,'0')}:${String(n.getMinutes()).padStart(2,'0')}:${String(n.getSeconds()).padStart(2,'0')}`;
+}
+
+// ═══════════════════════════════════════════════════════
+// EXEC ACTION (core output)
+// ═══════════════════════════════════════════════════════
+function execAction(type, desc, result) {
+  const entry = {
+    id: Date.now(),
+    time: timeDisplay(),
+    type, desc, result,
+  };
+  State.execLog.unshift(entry);
+  if (State.execLog.length > 12) State.execLog.pop();
+  renderExecLog();
+  consoleLog(result === 'ok' ? 'ok' : result === 'warn' ? 'warn' : 'err',
+    `[${type}] ${desc}`);
+}
+
+// ═══════════════════════════════════════════════════════
+// CONSOLE LOG
+// ═══════════════════════════════════════════════════════
+function consoleLog(level, msg) {
+  const out = document.getElementById('console-output');
+  const line = document.createElement('div');
+  line.className = 'log-line';
+  line.innerHTML = `
+    <span class="log-time">${timeDisplay()}</span>
+    <span class="log-level-${level}">[${level.toUpperCase()}]</span>
+    <span class="log-msg">${msg}</span>`;
+  out.appendChild(line);
+  out.scrollTop = out.scrollHeight;
+}
+
+// ═══════════════════════════════════════════════════════
+// COMMAND PROCESSOR
+// ═══════════════════════════════════════════════════════
+const CMD_HELP = [
+  'commit [msg]   → registra un commit con contexto NTI',
+  'log [msg]      → guarda entrada en log de ejecución',
+  'ejecutar [id]  → dispara protocolo por ID de regla',
+  'estado         → muestra NTI, MIHM, REAL, herramienta',
+  'reglas         → lista reglas activas en este momento',
+  'limpiar        → vacía la consola',
+  'ayuda          → este mensaje',
+];
+
+function runCmd() {
+  const input = document.getElementById('cmd-input');
+  const raw = input.value.trim();
+  if (!raw) return;
+  State.cmdHistory.unshift(raw);
+  State.historyIdx = -1;
+  input.value = '';
+  consoleLog('info', `> accion ${raw}`);
+  processCmd(raw);
+}
+
+function processCmd(raw) {
+  const parts = raw.split(/\s+/);
+  const cmd = parts[0].toLowerCase();
+  const args = parts.slice(1).join(' ');
+
+  switch (cmd) {
+    case 'commit':
+      execAction('COMMIT',
+        args || `snapshot_manual_${timestamp()}.md`,
+        'ok');
+      break;
+    case 'log':
+      execAction('LOG',
+        args || `entrada_manual_${timestamp()}`,
+        'ok');
+      break;
+    case 'ejecutar': {
+      const rule = RULES.find(r => r.id === args || r.type === args);
+      if (rule) {
+        rule.exec(State);
+        flashRule(rule.id);
+      } else {
+        consoleLog('err', `regla no encontrada: "${args}"`);
+      }
+      break;
+    }
+    case 'estado':
+      consoleLog('sys', `NTI: ${State.nti.toFixed(4)}`);
+      consoleLog('sys', `MIHM: ${State.mihm.toFixed(4)}`);
+      consoleLog('sys', `REAL: ${State.sensorIn.toFixed(4)}`);
+      consoleLog('sys', `TOOL: ${State.activeTool || 'ninguna'}`);
+      consoleLog('sys', `ESTADO: ${getNTIState(State.nti).label}`);
+      break;
+    case 'reglas': {
+      const active = RULES.filter(r => r.test(State));
+      if (!active.length) {
+        consoleLog('info', 'ninguna regla activa en estado actual');
+      } else {
+        active.forEach(r => consoleLog('sys', `${r.id}: ${r.cond} → ${r.action}`));
+      }
+      break;
+    }
+    case 'limpiar':
+      document.getElementById('console-output').innerHTML = '';
+      break;
+    case 'ayuda':
+      CMD_HELP.forEach(l => consoleLog('info', l));
+      break;
+    default:
+      consoleLog('err', `comando desconocido: "${cmd}". Escribe "ayuda".`);
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// SENSOR UPDATE
+// ═══════════════════════════════════════════════════════
+function updateSensor() {
+  State.commits  = parseInt(document.getElementById('commits-slider').value);
+  State.focusMin = parseInt(document.getElementById('focus-slider').value);
+
+  const cNorm = State.commits / 8;
+  const fNorm = State.focusMin / 240;
+  State.sensorIn = cNorm * 0.55 + fNorm * 0.45;
+  State.mihm     = getMIHM();
+  State.nti      = Math.abs(State.mihm - State.sensorIn);
+
+  document.getElementById('commits-val').textContent = State.commits;
+  document.getElementById('focus-val').textContent   = State.focusMin;
+  document.getElementById('commits-norm').textContent = `norm: ${cNorm.toFixed(3)}`;
+  document.getElementById('focus-norm').textContent   = `norm: ${fNorm.toFixed(3)}`;
+
+  updateNTIDisplay();
+  evaluateRules();
+}
+
+// ═══════════════════════════════════════════════════════
+// NTI DISPLAY
+// ═══════════════════════════════════════════════════════
+function updateNTIDisplay() {
+  const nti  = State.nti;
+  const st   = getNTIState(nti);
+  const pct  = Math.min(nti * 100, 100);
+  const mpct = State.mihm * 100;
+  const spct = State.sensorIn * 100;
+
+  document.getElementById('nti-value').textContent = nti.toFixed(4);
+  document.getElementById('nti-value').style.color = st.color;
+  document.getElementById('nti-state').textContent = st.label;
+  document.getElementById('nti-state').style.color = st.color;
+  document.getElementById('nti-bar-fill').style.width = pct + '%';
+  document.getElementById('nti-bar-fill').style.background =
+    `linear-gradient(90deg, var(--gold) 0%, ${st.color} 100%)`;
+
+  const panel = document.getElementById('nti-panel');
+  panel.classList.toggle('alert-state', nti > 0.6);
+
+  const badge = document.getElementById('status-badge');
+  badge.className = 'status-badge ' + st.css;
+  document.getElementById('status-text').textContent = st.label;
+
+  document.getElementById('mihm-fill').style.width  = mpct + '%';
+  document.getElementById('sensor-fill').style.width = spct + '%';
+  document.getElementById('sensor-fill').style.background = st.color;
+  document.getElementById('mihm-num').textContent   = State.mihm.toFixed(3);
+  document.getElementById('real-num').textContent   = State.sensorIn.toFixed(3);
+  document.getElementById('real-num').style.color   = st.color;
+  document.getElementById('footer-nti').textContent = `NTI: ${nti.toFixed(4)}`;
+}
+
+// ═══════════════════════════════════════════════════════
+// RULE ENGINE EVALUATION
+// ═══════════════════════════════════════════════════════
+let lastFiredRules = new Set();
+
+function evaluateRules() {
+  const nowFiring = new Set();
+  RULES.forEach(rule => {
+    const fires = rule.test(State);
+    const el = document.getElementById('rule-' + rule.id);
+    if (fires) {
+      nowFiring.add(rule.id);
+      if (el) el.className = 'rule-item firing';
+      // Auto-execute on first fire (rising edge)
+      if (!lastFiredRules.has(rule.id)) {
+        rule.exec(State);
+        flashRule(rule.id);
+      }
+    } else {
+      if (el) el.className = 'rule-item';
+    }
+  });
+  lastFiredRules = nowFiring;
+}
+
+function flashRule(id) {
+  const el = document.getElementById('rule-' + id);
+  if (!el) return;
+  el.style.animation = 'none';
+  el.offsetHeight; // reflow
+  el.style.animation = 'ruleFlash 0.6s ease-out';
+}
+
+// ═══════════════════════════════════════════════════════
+// TOOL ACTIVATION
+// ═══════════════════════════════════════════════════════
+function activateTool(id) {
+  State.activeTool = State.activeTool === id ? null : id;
+  document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+  if (State.activeTool) {
+    const btn = document.getElementById('tool-' + id);
+    if (btn) btn.classList.add('active');
+    const tool = TOOLS.find(t => t.id === id);
+    if (tool) consoleLog('sys', `herramienta activada: ${tool.label} · ${tool.hz}Hz`);
+    playTone(TOOLS.find(t => t.id === id)?.hz || 440);
+  }
+  evaluateRules();
+}
+
+// ═══════════════════════════════════════════════════════
+// AUDIO
+// ═══════════════════════════════════════════════════════
+let audioCtx = null;
+function getAudioCtx() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  return audioCtx;
+}
+function playTone(hz) {
+  try {
+    const ctx = getAudioCtx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = hz;
+    gain.gain.setValueAtTime(0.06, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 1.5);
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.start(); osc.stop(ctx.currentTime + 1.5);
+  } catch(e) {}
+}
+
+// ═══════════════════════════════════════════════════════
+// RENDER FUNCTIONS
+// ═══════════════════════════════════════════════════════
+function renderToolGrid() {
+  const grid = document.getElementById('tool-grid');
+  grid.innerHTML = TOOLS.map(t => `
+    <button class="tool-btn" id="tool-${t.id}" onclick="activateTool('${t.id}')">
+      <span>${t.label}</span>
+      <span class="hz">${t.hz}Hz</span>
+    </button>`).join('');
+}
+
+function renderRules() {
+  const list = document.getElementById('rule-list');
+  list.innerHTML = RULES.map(r => `
+    <div class="rule-item" id="rule-${r.id}">
+      <div class="rule-cond">${r.cond}</div>
+      <div class="rule-arrow">→</div>
+      <div class="rule-action">
+        <span>${r.action}</span>
+        <div class="rule-indicator"></div>
+      </div>
+    </div>`).join('');
+}
+
+function renderExecLog() {
+  const el = document.getElementById('exec-log');
+  if (!State.execLog.length) {
+    el.innerHTML = '<div style="font-size:9px;color:var(--text-ghost);letter-spacing:0.1em;padding:8px 0">— sin acciones ejecutadas —</div>';
+    return;
+  }
+  el.innerHTML = State.execLog.map(e => `
+    <div class="exec-entry">
+      <span class="exec-time">${e.time}</span>
+      <span class="exec-desc">[${e.type}] ${e.desc}</span>
+      <span class="exec-result ${e.result}">${e.result.toUpperCase()}</span>
+    </div>`).join('');
+}
+
+function clearExecLog() {
+  State.execLog = [];
+  renderExecLog();
+}
+
+// ═══════════════════════════════════════════════════════
+// CLOCK + TICK
+// ═══════════════════════════════════════════════════════
+function tick() {
+  const now = new Date();
+  document.getElementById('clock-display').textContent =
+    now.toLocaleTimeString('es-MX', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+
+  // Update MIHM continuously
+  const newMIHM = getMIHM();
+  if (Math.abs(newMIHM - State.mihm) > 0.0001) {
+    State.mihm = newMIHM;
+    State.nti  = Math.abs(State.mihm - State.sensorIn);
+    updateNTIDisplay();
+    evaluateRules();
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// KEYBOARD
+// ═══════════════════════════════════════════════════════
+document.addEventListener('keydown', e => {
+  const input = document.getElementById('cmd-input');
+  if (e.key === 'ArrowUp' && document.activeElement === input) {
+    if (State.historyIdx < State.cmdHistory.length - 1) {
+      State.historyIdx++;
+      input.value = State.cmdHistory[State.historyIdx];
+    }
+    e.preventDefault();
+  }
+  if (e.key === 'ArrowDown' && document.activeElement === input) {
+    if (State.historyIdx > 0) {
+      State.historyIdx--;
+      input.value = State.cmdHistory[State.historyIdx];
+    } else {
+      State.historyIdx = -1;
+      input.value = '';
+    }
+    e.preventDefault();
+  }
+});
+
+// ═══════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════
+function init() {
+  renderToolGrid();
+  renderRules();
+  renderExecLog();
+  updateSensor();
+  tick();
+  setInterval(tick, 1000);
+
+  consoleLog('sys', 'SF-CORE.ANCHOR v0.2 — sistema inicializado');
+  consoleLog('info', 'MIHM activo · SensorIn en espera · Motor de reglas cargado');
+  consoleLog('info', 'escribe "ayuda" para ver comandos disponibles');
+}
+
+init();
+</script>
+</body>
+</html>
