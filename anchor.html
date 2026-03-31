@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SF-CORE.ANCHOR</title>
+  <style>
+    :root { --bg:#060606; --panel:#0f0f0f; --line:#232323; --gold:#C8A951; --text:#d2d2d2; --dim:#707070; --red:#ff3b30; --green:#34C759; }
+    *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--text);font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+    .app{max-width:980px;margin:0 auto;padding:20px}
+    .header,.grid{display:grid;gap:12px}.header{grid-template-columns:1fr auto;align-items:center;border-bottom:1px solid var(--line);padding-bottom:12px}
+    .title{font-size:26px;font-weight:700;color:#fff}.sub{font-size:12px;color:var(--dim)}
+    .badge{border:1px solid var(--line);padding:6px 10px;font-size:11px}.panel{border:1px solid var(--line);background:var(--panel);padding:14px}
+    .grid{grid-template-columns:1fr 1fr}.full{grid-column:1/-1}.label{font-size:11px;color:var(--gold);margin-bottom:8px;letter-spacing:.08em}
+    .nti{font-size:46px;color:var(--gold);font-weight:700}.state{font-size:11px;margin-top:4px}
+    .bar{height:4px;background:#1d1d1d;position:relative;margin:10px 0}.fill{position:absolute;inset:0 auto 0 0;background:var(--gold);width:0}
+    .kv{display:grid;grid-template-columns:1fr auto;gap:6px;font-size:12px;padding:3px 0}.kv span:last-child{color:#fff}
+    .tool-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}.btn{background:#0a0a0a;border:1px solid var(--line);color:var(--text);padding:8px;cursor:pointer;font-size:11px}
+    .btn:hover{border-color:var(--gold)} .btn.active{border-color:var(--gold);color:var(--gold)}
+    .log{height:180px;overflow:auto;border:1px solid var(--line);padding:8px;background:#090909;font-size:12px}
+    .row{display:flex;gap:8px}.row input{flex:1;background:#090909;border:1px solid var(--line);color:var(--text);padding:8px}.row button{padding:8px 12px}
+    .ok{color:var(--green)} .err{color:var(--red)} .muted{color:var(--dim)}
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="header">
+      <div>
+        <div class="muted" style="font-size:11px">SF-CORE · MODULE 1.0</div>
+        <div class="title">ANCHOR</div>
+        <div class="sub">Orquestador conectado a backend SystemFriction</div>
+      </div>
+      <div class="badge" id="status">BOOT</div>
+    </div>
+
+    <div class="grid" style="margin-top:12px">
+      <div class="panel">
+        <div class="label">NTI · ÍNDICE DE TENSIÓN NODAL</div>
+        <div class="nti" id="nti">0.0000</div>
+        <div class="state" id="ntiState">COHERENTE</div>
+        <div class="bar"><div class="fill" id="ntiBar"></div></div>
+        <div class="kv"><span>MIHM</span><span id="mihm">0.0000</span></div>
+        <div class="kv"><span>SENSOR_IN</span><span id="sensorIn">0.0000</span></div>
+      </div>
+
+      <div class="panel">
+        <div class="label">SENSORES REALES</div>
+        <div class="kv"><span>Commits hoy</span><span id="commits">0</span></div>
+        <div class="kv"><span>Focus minutos</span><span id="focus">0</span></div>
+        <div class="kv"><span>Fuente commits</span><span id="commitsSrc">fallback</span></div>
+        <div class="kv"><span>Fuente foco</span><span id="focusSrc">fallback</span></div>
+        <div class="kv"><span>Backend</span><span id="backendName">desconocido</span></div>
+        <div class="kv"><span>Último ciclo</span><span id="cycleAt">-</span></div>
+      </div>
+
+      <div class="panel full">
+        <div class="label">HERRAMIENTAS · EFECTO REAL</div>
+        <div class="tool-grid" id="tools"></div>
+      </div>
+
+      <div class="panel">
+        <div class="label">REGLAS ACTIVAS</div>
+        <div id="rules"></div>
+      </div>
+
+      <div class="panel">
+        <div class="label">CONSOLA</div>
+        <div class="log" id="log"></div>
+        <div class="row" style="margin-top:8px">
+          <input id="cmd" placeholder="estado | tick | commit mensaje | predict" />
+          <button class="btn" id="run">RUN</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const CFG = {
+      backendBase: localStorage.getItem('sf_backend_base') || 'https://scorefriction-production.up.railway.app',
+      githubOwner: localStorage.getItem('sf_github_owner') || '',
+      githubRepo: localStorage.getItem('sf_github_repo') || '',
+      githubToken: localStorage.getItem('sf_github_token') || '',
+      focusFallbackFile: localStorage.getItem('sf_focus_file') || './state/focus_minutes.json',
+      pollMs: 3000,
+    };
+
+    const State = { commits:0, focus_minutes:0, sensorIn:0, mihm:0, nti:0, active_tool:null, rules_active:[], timestamp:null };
+    const RULES = [
+      { id:'r1', cond:s=>s.nti>0.6, desc:'NTI > 0.6 → pm/event' },
+      { id:'r2', cond:s=>s.nti>0.8, desc:'NTI > 0.8 → predict + snapshot' },
+      { id:'r3', cond:s=>s.active_tool==='gavel', desc:'gavel → decisión forzada' },
+      { id:'r4', cond:s=>s.active_tool==='chisel', desc:'chisel → narrativa' },
+      { id:'r5', cond:s=>s.sensorIn < s.mihm - 0.3, desc:'desfase crítico' },
+      { id:'r6', cond:s=>s.sensorIn >= s.mihm && s.mihm>0, desc:'coherencia trayectoria' },
+    ];
+    const risingState = new Map(RULES.map(r=>[r.id,false]));
+
+    const TOOLS = [
+      ['compass','recalibrar target'], ['square','bloquear drift'], ['gavel','decisión forzada'], ['chisel','log narrativo'], ['level','normalizar nti'],
+      ['mallet','impacto corto'], ['ruler','medición'], ['trowel','construcción'], ['plumb','alineación'], ['compass-square','síntesis']
+    ];
+
+    function log(msg, cls='muted'){ const el=document.getElementById('log'); const d=document.createElement('div'); d.className=cls; d.textContent=`${new Date().toLocaleTimeString()} ${msg}`; el.prepend(d); }
+    function mihmNow(){ const n=new Date(); const h=n.getHours()+n.getMinutes()/60; if(h<=6)return 0; if(h>=22)return 1; return (h-6)/16; }
+    function ntiLabel(v){ if(v<0.2)return 'COHERENTE'; if(v<0.4)return 'TENSIÓN BAJA'; if(v<0.6)return 'TENSIÓN CRÍTICA'; if(v<0.8)return 'BIFURCACIÓN'; return 'COLAPSO'; }
+
+    async function fetchCommitsToday(){
+      if(!CFG.githubOwner || !CFG.githubRepo){ return { value:0, source:'fallback' }; }
+      const since = new Date(); since.setHours(0,0,0,0);
+      const headers = CFG.githubToken ? { Authorization: `Bearer ${CFG.githubToken}` } : {};
+      try {
+        const url = `https://api.github.com/repos/${CFG.githubOwner}/${CFG.githubRepo}/commits?since=${encodeURIComponent(since.toISOString())}`;
+        const res = await fetch(url, { headers });
+        if(!res.ok) throw new Error('github fail');
+        const data = await res.json();
+        return { value: Array.isArray(data) ? data.length : 0, source:'github-api' };
+      } catch { return { value:0, source:'fallback' }; }
+    }
+
+    async function fetchFocusMinutes(){
+      try {
+        const res = await fetch(CFG.focusFallbackFile, { cache:'no-store' });
+        if(!res.ok) throw new Error('no focus file');
+        const data = await res.json();
+        return { value: Number(data.focus_minutes || 0), source:'manual-file' };
+      } catch { return { value:0, source:'fallback' }; }
+    }
+
+    async function backend(path, options={}){
+      const res = await fetch(`${CFG.backendBase}${path}`, { headers:{'Content-Type':'application/json'}, ...options });
+      const txt = await res.text();
+      try { return { ok:res.ok, status:res.status, data: txt ? JSON.parse(txt) : {} }; }
+      catch { return { ok:res.ok, status:res.status, data:{ raw:txt } }; }
+    }
+
+    async function runRuleActions(ruleId){
+      if(ruleId==='r1') await backend('/pm/event', { method:'POST', body: JSON.stringify({ event:'anchor_bifurcation', nti:State.nti }) });
+      if(ruleId==='r2') await backend('/predict', { method:'POST', body: JSON.stringify({ current_ihg: -0.62, horizon_days: 30 }) });
+      if(ruleId==='r3') await backend('/pm/event', { method:'POST', body: JSON.stringify({ event:'anchor_gavel', mode:'forced' }) });
+      if(ruleId==='r4') await backend('/pm/event', { method:'POST', body: JSON.stringify({ event:'anchor_chisel', text:'narrativa intervenida' }) });
+      if(ruleId==='r5') await backend('/pm/event', { method:'POST', body: JSON.stringify({ event:'anchor_gap', delta: Number((State.mihm-State.sensorIn).toFixed(4)) }) });
+      if(ruleId==='r6') await backend('/pm/event', { method:'POST', body: JSON.stringify({ event:'anchor_coherence', nti:State.nti }) });
+      log(`[RULE ${ruleId}] ejecutada`, 'ok');
+    }
+
+    async function evaluateRules(){
+      const active = [];
+      for(const rule of RULES){
+        const fired = rule.cond(State);
+        if(fired) active.push(rule.id);
+        const prev = risingState.get(rule.id);
+        if(fired && !prev){ await runRuleActions(rule.id); }
+        risingState.set(rule.id, fired);
+      }
+      State.rules_active = active;
+      renderRules();
+    }
+
+    function render(){
+      document.getElementById('nti').textContent = State.nti.toFixed(4);
+      document.getElementById('ntiState').textContent = ntiLabel(State.nti);
+      document.getElementById('ntiBar').style.width = `${Math.min(100, State.nti*100)}%`;
+      document.getElementById('mihm').textContent = State.mihm.toFixed(4);
+      document.getElementById('sensorIn').textContent = State.sensorIn.toFixed(4);
+      document.getElementById('commits').textContent = String(State.commits);
+      document.getElementById('focus').textContent = String(State.focus_minutes);
+      document.getElementById('cycleAt').textContent = new Date().toISOString();
+      document.getElementById('status').textContent = `${ntiLabel(State.nti)} · ${CFG.backendBase.replace('https://','')}`;
+    }
+
+    function renderRules(){
+      const el = document.getElementById('rules');
+      el.innerHTML = RULES.map(r=>`<div class="kv"><span>${r.id}: ${r.desc}</span><span class="${State.rules_active.includes(r.id)?'ok':'muted'}">${State.rules_active.includes(r.id)?'ON':'OFF'}</span></div>`).join('');
+    }
+
+    async function pullBackendState(){
+      const [s1, s2] = await Promise.all([backend('/state'), backend('/system/state')]);
+      if(s1.ok && s1.data){
+        if(typeof s1.data.nti === 'number') State.nti = s1.data.nti;
+        if(typeof s1.data.ihg === 'number') document.getElementById('backendName').textContent = `IHG ${s1.data.ihg.toFixed(3)}`;
+      }
+      if(s2.ok && s2.data && typeof s2.data.nti === 'number'){ State.nti = s2.data.nti; }
+      return s1.ok || s2.ok;
+    }
+
+    async function cycle(){
+      const [c,f,bOk] = await Promise.all([fetchCommitsToday(), fetchFocusMinutes(), pullBackendState()]);
+      State.commits = c.value; State.focus_minutes = f.value;
+      document.getElementById('commitsSrc').textContent = c.source;
+      document.getElementById('focusSrc').textContent = f.source;
+      const cNorm = Math.min(State.commits/8,1), fNorm = Math.min(State.focus_minutes/240,1);
+      State.sensorIn = cNorm*0.55 + fNorm*0.45;
+      State.mihm = mihmNow();
+      State.nti = Math.abs(State.mihm - State.sensorIn);
+      if(!bOk) log('Backend no disponible, usando cálculo determinista local', 'err');
+      await evaluateRules();
+      render();
+    }
+
+    function setupTools(){
+      const el = document.getElementById('tools');
+      el.innerHTML = TOOLS.map(([id,label])=>`<button class="btn" id="tool-${id}"><b>${id}</b><br><span class="muted">${label}</span></button>`).join('');
+      TOOLS.forEach(([id]) => {
+        document.getElementById(`tool-${id}`).onclick = async () => {
+          State.active_tool = (State.active_tool===id?null:id);
+          [...el.querySelectorAll('.btn')].forEach(b=>b.classList.remove('active'));
+          if(State.active_tool) document.getElementById(`tool-${id}`).classList.add('active');
+          await evaluateRules();
+          render();
+        };
+      });
+    }
+
+    async function runCommand(raw){
+      const [cmd,...rest]=raw.trim().split(' '); const arg=rest.join(' ');
+      if(!cmd) return;
+      if(cmd==='estado'){ log(JSON.stringify(State), 'ok'); return; }
+      if(cmd==='tick'){ const r = await backend('/orchestrator/tick', { method:'POST', body:'{}' }); log(`tick ${r.status}`, r.ok?'ok':'err'); return; }
+      if(cmd==='predict'){ const r = await backend('/predict', { method:'POST', body: JSON.stringify({ current_ihg:-0.6,horizon_days:30 }) }); log(`predict ${r.status}`, r.ok?'ok':'err'); return; }
+      if(cmd==='commit'){ const r = await backend('/pm/event', { method:'POST', body: JSON.stringify({ event:'anchor_manual_commit', message: arg || 'manual snapshot' }) }); log(`commit-event ${r.status}`, r.ok?'ok':'err'); return; }
+      log(`comando no reconocido: ${cmd}`, 'err');
+    }
+
+    document.getElementById('run').onclick = async () => { const i=document.getElementById('cmd'); await runCommand(i.value); i.value=''; };
+    document.getElementById('cmd').addEventListener('keydown', async e=>{ if(e.key==='Enter'){ const i=e.target; await runCommand(i.value); i.value=''; } });
+
+    setupTools();
+    renderRules();
+    cycle();
+    setInterval(cycle, CFG.pollMs);
+    log('ANCHOR inicializado', 'ok');
+  </script>
+</body>
+</html>
